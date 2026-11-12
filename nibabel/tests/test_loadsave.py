@@ -18,13 +18,15 @@ from .. import (
 )
 from .._compression import HAVE_ZSTD
 from ..filebasedimages import ImageFileError
-from ..loadsave import _signature_matches_extension, load, read_img_data
+from ..loadsave import _signature_matches_extension, load, read_img_data, save
+from ..minc2 import Minc2Image
 from ..openers import Opener
 from ..optpkg import optional_package
 from ..testing import deprecated_to, expires
 from ..tmpdirs import InTemporaryDirectory
 
 _, have_scipy, _ = optional_package('scipy')
+_, have_h5py, _ = optional_package('h5py')
 
 import pytest
 from numpy.testing import assert_almost_equal, assert_array_equal
@@ -212,3 +214,24 @@ def test_read_img_data_nifti():
                 assert_array_equal(exp_offset, read_img_data(img_back))
             # Delete stuff that might hold onto file references
             del img, img_back, data_back
+
+
+@pytest.mark.skipif(not have_h5py, reason='Need h5py')
+def test_save_read_only_converts(tmp_path):
+    # MINC1 images cannot be written, so saving one as .mnc converts it to
+    # MINC2, the writable class for that extension
+    img = load(pjoin(data_path, 'minc1_1_scale.mnc'))
+    assert not img.rw
+    fname = tmp_path / 'img.mnc'
+    save(img, fname)
+    rt_img = load(fname)
+    assert isinstance(rt_img, Minc2Image)
+    assert_array_equal(rt_img.get_fdata(), img.get_fdata())
+    assert_array_equal(rt_img.affine, img.affine)
+
+
+def test_save_read_only_no_writable_class(tmp_path):
+    # Without a writable class for the extension, the error still shows
+    img = load(pjoin(data_path, 'phantom_EPI_asc_CLEAR_2_1.PAR'))
+    with pytest.raises(NotImplementedError):
+        save(img, tmp_path / 'img.par')
