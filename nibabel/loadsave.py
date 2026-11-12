@@ -167,6 +167,10 @@ def save(img: FileBasedImage, filename: FileSpec, **kwargs) -> None:
         img.to_filename(filename, **kwargs)
     except ImageFileError:
         pass
+    except NotImplementedError:
+        # Read-only formats, such as MINC1, convert to a writable class below
+        if img.rw:
+            raise
     else:
         return
 
@@ -192,6 +196,8 @@ def save(img: FileBasedImage, filename: FileSpec, **kwargs) -> None:
         valid_klasses = [klass for klass in all_image_classes if lext in klass.valid_exts]
         if not valid_klasses:  # if list is empty
             raise ImageFileError(f'Cannot work out file type of "{filename}"')
+        # Prefer classes that can write, such as MINC2 over MINC1 for .mnc
+        valid_klasses.sort(key=lambda klass: not klass.rw)
 
         # Got a list of valid extensions, but that's no guarantee
         #   the file conversion will work. So, try each image
